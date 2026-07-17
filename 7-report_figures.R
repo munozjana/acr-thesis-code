@@ -2,16 +2,17 @@
 # Report Figures — ACR Research Update for Richter & Wit
 # Generates 6 publication-quality plots:
 #   Fig 1: Adversary environment discovery (airquality scatter)
-#   Fig 2: Coefficient comparison OLS vs ACR
 #   Fig 3: OOD MSE by holdout month
-#   Fig 4: Delta_R non-monotonicity
 #   Fig 5: Pareto frontier (accuracy vs stability)
-#   Fig 6: Adversary AUC vs shift strength (SEM, mean vs variance)
+#   Fig 14 sem grid heatmap plot
 # ============================================================
+library(ggplot2)
+library(dplyr)
 
 out_dir <- "/Users/janamunoz/Desktop/Literatura tesis/working folder/"
+code_dir <- "/Users/janamunoz/Desktop/acr-thesis-code/"
 
-# ---- Colour palette (consistent across all figures) ----
+# ---- Colour palette ----
 C_OLS    <- "#2980B9"   # steel blue
 C_ACR    <- "#C0392B"   # red
 C_RAND   <- "#27AE60"   # green
@@ -232,49 +233,6 @@ text(-1.8, 2.1, "92% of May\n→ Hard env", col=C_ACR, cex=0.78, font=3)
 text( 1.5,-1.6, "84% of Jul–Aug\n→ Easy env", col=C_OLS, cex=0.78, font=3)
 dev.off()
 
-
-# ============================================================
-# FIGURE 2: COEFFICIENT COMPARISON (OLS vs ACR)
-# ============================================================
-
-pdf(paste0(out_dir,"7-fig2_coefficients.pdf"), width=7, height=5)
-par(mar=c(4.5, 5, 3, 1.5), mgp=c(3,0.7,0), family="sans")
-
-# Lambda path for each predictor
-matplot(gamma_grid, t(betas), type="l",
-        lwd = 2.5,
-        lty = c(1,2,4),
-        col = c("#E67E22","#2980B9","#27AE60"),
-        xlab = expression(lambda),
-        ylab = "Estimated coefficient",
-        main = "Coefficient Paths under Adversarial Regularization",
-        log  = "x",
-        xlim = c(0.5, 100),
-        xaxt = "n")
-
-axis(1, at = c(0.5,1,2,5,10,20,50,100),
-     labels = c("0.5","1","2","5","10","20","50","100"))
-
-abline(h = 0,   lty = 3, col = "grey70")
-abline(v = 1,   lty = 3, col = C_DARK, lwd = 1.5)
-text(1.15, max(betas)*0.92, expression(lambda*"=1  (CV)"),
-     col = C_DARK, cex = 0.78, adj = 0)
-
-legend("bottomright", bty="n", cex=0.88, lwd=2.5, lty=c(1,2,4),
-       col    = c("#E67E22","#2980B9","#27AE60"),
-       legend = c("Solar.R  (sign reversal at λ=1)",
-                  "Wind     (stable across λ)",
-                  "Temp     (shrinkage)"))
-
-# Annotate the sign reversal on Solar.R
-sr_vals <- betas[1,]   # row 1 = Solar.R
-sign_chg <- which(diff(sign(sr_vals)) != 0)
-if (length(sign_chg) > 0) {
-  abline(h = 0, col = "#E67E22", lty = 3, lwd = 1)
-}
-dev.off()
-
-
 # ============================================================
 # FIGURE 3: OOD MSE BY HOLDOUT MONTH
 # ============================================================
@@ -325,59 +283,6 @@ legend("topright", bty="n", cex=0.85,
        legend=c("OLS","ACR-Adv","CR-Random"),
        fill=adjustcolor(c(C_OLS,C_ACR,C_RAND), 0.82), border=NA)
 dev.off()
-
-
-# ============================================================
-# FIGURE 4: DELTA_R NON-MONOTONICITY
-# ============================================================
-
-pdf(paste0(out_dir,"7-fig4_deltaR_nonmonotone.pdf"), width=7, height=5)
-par(mar=c(4.5, 5, 3, 5), mgp=c(3,0.7,0), family="sans")
-
-# Left axis: Delta_R
-plot(gamma_grid[-1], delta_R[-1],   # skip lambda=0 for log axis
-     type="b", pch=17, lwd=2.5, col=C_DARK,
-     log="x", xaxt="n",
-     xlab=expression(lambda),
-     ylab=expression(paste(Delta, R, " (risk gap)")),
-     main=expression(paste(Delta, R, " Non-Monotonicity under Adversarial Co-Adaptation")),
-     ylim=c(0, max(delta_R)*1.15),
-     las=1)
-
-axis(1, at=c(0.5,1,2,5,10,20,50,100),
-     labels=c("0.5","1","2","5","10","20","50","100"))
-
-# Right axis: OOD MSE
-par(new=TRUE)
-plot(gamma_grid[-1], ood_mse[-1],
-     type="b", pch=16, lwd=2.5, col=C_ACR,
-     log="x", xaxt="n", yaxt="n",
-     xlab="", ylab="",
-     ylim=c(min(ood_mse)*0.92, max(ood_mse)*1.08))
-
-axis(4, las=1, col.axis=C_ACR, col=C_ACR)
-mtext("OOD MSE (September holdout)", side=4, line=3.5, col=C_ACR, cex=0.9)
-
-# OLS baseline
-abline(h=ood_mse[1], lty=3, col=C_ACR, lwd=1.5)
-text(70, ood_mse[1]*1.01, "OLS baseline", col=C_ACR, cex=0.75, adj=1)
-
-# lambda=1 marker
-abline(v=1, lty=2, col="grey50", lwd=1.5)
-text(1.15, max(delta_R)*1.05, expression(lambda*"=1"),
-     col="grey40", cex=0.78, adj=0)
-
-# Annotation: the paradox
-text(15, max(delta_R)*0.55,
-     expression(paste(Delta,R," grows — yet OOD MSE improves")),
-     col=C_DARK, cex=0.77, font=3)
-
-legend("right", bty="n", cex=0.85, inset=0.02,
-       lwd=2.5, pch=c(17,16),
-       col=c(C_DARK, C_ACR),
-       legend=c(expression(Delta*R), "OOD MSE"))
-dev.off()
-
 
 # ============================================================
 # FIGURE 5: PARETO FRONTIER
@@ -434,67 +339,47 @@ text(legend_x + n_leg*rect_w, legend_y + diff(range(delta_R))*0.03,
 dev.off()
 
 
-# ============================================================
-# FIGURE 6: ADVERSARY AUC vs SHIFT STRENGTH (SEM)
-# ============================================================
-
-pdf(paste0(out_dir,"7-fig6_auc_vs_alpha.pdf"), width=7, height=5)
-par(mar=c(4.5, 5, 3, 1.5), mgp=c(3,0.7,0), family="sans")
-
-auc_m <- subset(auc_mean, shift_type=="mean")
-auc_v <- subset(auc_mean, shift_type=="variance")
-sd_m  <- subset(auc_sd,   shift_type=="mean")
-sd_v  <- subset(auc_sd,   shift_type=="variance")
-
-ylim <- c(0.44, 1.02)
-plot(auc_m$alpha, auc_m$adv_auc,
-     type="b", pch=17, lwd=2.5, col=C_ACR,
-     ylim=ylim,
-     xlab=expression("Training shift strength " ~ alpha),
-     ylab="Environment discovery AUC",
-     main="Adversary: How Well Does It Recover the True Split?",
-     las=1)
-
-# CI band for mean shift
-polygon(c(auc_m$alpha, rev(auc_m$alpha)),
-        c(auc_m$adv_auc + sd_m$adv_auc,
-          rev(auc_m$adv_auc - sd_m$adv_auc)),
-        col=adjustcolor(C_ACR, 0.15), border=NA)
-
-lines(auc_v$alpha, auc_v$adv_auc,
-      type="b", pch=17, lwd=2.5, col=C_OLS, lty=2)
-polygon(c(auc_v$alpha, rev(auc_v$alpha)),
-        c(auc_v$adv_auc + sd_v$adv_auc,
-          rev(auc_v$adv_auc - sd_v$adv_auc)),
-        col=adjustcolor(C_OLS, 0.15), border=NA)
-
-# Chance line
-abline(h=0.5, lty=3, col="grey55", lwd=1.5)
-text(9.5, 0.515, "Chance (0.5)", col="grey45", cex=0.78, adj=1)
-
-# Perfect line
-abline(h=1.0, lty=3, col="grey80")
-
-# Annotation: saturation zone
-rect(0.7, 0.44, 10.3, 0.62,
-     col=adjustcolor("grey80",0.25), border=NA)
-text(5.5, 0.455,
-     "Child-variable saturation zone\n(adversary near-blind)",
-     col="grey40", cex=0.72, font=3)
-
-legend("topright", bty="n", cex=0.88, lwd=2.5,
-       pch=17, lty=c(1,2),
-       col=c(C_ACR, C_OLS),
-       legend=c("Mean shift (adversary detects signal)",
-                "Variance shift (adversary blind)"))
-dev.off()
-
-cat("\nAll 6 figures saved to:\n")
-cat(paste0("  ", out_dir, "7-fig", 1:6, "_*.pdf\n"))
 cat("\nFigure list:\n")
 cat("  Fig 1: 7-fig1_adversary_discovery.pdf\n")
-cat("  Fig 2: 7-fig2_coefficients.pdf\n")
-cat("  Fig 3: 7-fig3_ood_by_month.pdf\n")
-cat("  Fig 4: 7-fig4_deltaR_nonmonotone.pdf\n")
-cat("  Fig 5: 7-fig5_pareto_frontier.pdf\n")
-cat("  Fig 6: 7-fig6_auc_vs_alpha.pdf\n")
+cat("  Fig 2: 7-fig3_ood_by_month.pdf\n")
+cat("  Fig 3: 7-fig5_pareto_frontier.pdf\n")
+#cat("  Fig 4: 8-fig2_mse_vs_alphatest.pdf\n")
+
+
+
+### 14
+load(paste0(code_dir, "14-sem_grid_big.RData"))
+
+results$x_label <- factor(
+  paste0(results$n_children, ifelse(results$n_children == 1, " child", " children")),
+  levels = paste0(0:4, ifelse(0:4 == 1, " child", " children")))
+
+results$y_label <- factor(
+  paste0(results$n_causal, ifelse(results$n_causal == 1, " parent", " parents")),
+  levels = paste0(1:10, ifelse(1:10 == 1, " parent", " parents")))
+
+p <- ggplot(results, aes(x = x_label, y = y_label,
+                          fill = auc, label = sprintf("%.2f", auc))) +
+  geom_tile(colour = "white", linewidth = 0.7) +
+  geom_text(size = 3.2, colour = "black", fontface = "bold") +
+  scale_fill_gradientn(
+    colours = c("#4575b4", "#91bfdb", "#ffffbf", "#fc8d59", "#d73027"),
+    values  = scales::rescale(c(0.50, 0.55, 0.60, 0.65, 0.75)),
+    limits  = c(0.50, NA),
+    name    = "Adversary\nAUC"
+  ) +
+  labs(title = NULL, subtitle = NULL, x = NULL, y = NULL) +
+  theme_bw(base_size = 12) +
+  theme(
+    axis.text.x      = element_text(size = 10),
+    axis.text.y      = element_text(size = 10),
+    legend.position  = "right",
+    panel.grid       = element_blank()
+  )
+
+for (path in c(code_dir, out_dir)) {
+  ggsave(paste0(path, "14-auc_heatmap_clean.pdf"), p, width = 8, height = 6.5)
+  ggsave(paste0(path, "14-auc_heatmap_clean.png"), p, width = 8, height = 6.5, dpi = 160)
+}
+cat("Saved 14-auc_heatmap_clean\n")
+
