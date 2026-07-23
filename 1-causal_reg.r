@@ -1,11 +1,9 @@
 #!/usr/bin/env Rscript
-# ^ This line tells your terminal to use Rscript
 
-# Load necessary library
 if (!require("optparse")) install.packages("optparse", repos="http://cran.us.r-project.org")
 library(optparse)
 
-# 1. Define Command Line Arguments
+# Command Line Arguments defined
 option_list = list(
   make_option(c("-s", "--shiftTarget"), type="double", default=4.0, 
               help="Strength of the distribution shift in the test set", metavar="double"),
@@ -18,7 +16,7 @@ option_list = list(
 opt_parser = OptionParser(option_list=option_list)
 opt = parse_args(opt_parser)
 
-# 2. Data Generation Function
+# SEM
 generate_sem_data <- function(n, shift_strength = 0) {
   eps <- matrix(rnorm(n * 7), ncol = 7)
   x1 <- eps[, 1]
@@ -34,12 +32,14 @@ generate_sem_data <- function(n, shift_strength = 0) {
   return(list(X = X, y = y))
 }
 
-# 3. Main Logic
-cat("Running simulation with inSampleShift =", opt$inSampleShift, "and shiftTarget =", opt$shiftTarget, "\n\n")
+cat("Running simulation with inSampleShift =", opt$inSampleShift, 
+    "and shiftTarget =", opt$shiftTarget, "\n\n")
 
+# Generate Environments
 env_train <- generate_sem_data(opt$n_samples, shift_strength = opt$inSampleShift)
 env_test  <- generate_sem_data(opt$n_samples, shift_strength = opt$shiftTarget)
 
+# Fit a simple OLS for comparison
 ols_model <- lm(env_train$y ~ env_train$X - 1)
 preds <- env_test$X %*% coef(ols_model)
 mse <- mean((env_test$y - preds)^2)
