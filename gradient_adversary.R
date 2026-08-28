@@ -1,4 +1,4 @@
-out_dir <- "/Users/janamunoz/Desktop/Literatura tesis/working folder/"
+out_dir <- ""
 
 HP <- list(
   T1      = 500,    # Phase 1 gradient-ascent steps
