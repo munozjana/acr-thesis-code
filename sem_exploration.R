@@ -15,8 +15,8 @@
 library(ggplot2)
 library(dplyr)
 
-out_dir  <- "/Users/janamunoz/Desktop/Thesis/working folder/"
-code_dir <- "/Users/janamunoz/Desktop/acr-thesis-code/"
+out_dir  <- ""
+code_dir <- ""
 
 # ── Core functions (same as all other experiments) ───────────────────────────
 
