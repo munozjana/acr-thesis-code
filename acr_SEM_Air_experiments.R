@@ -17,7 +17,7 @@
 #   Coef error  : ||beta_hat / ||beta_hat|| - beta* / ||beta*||||  (SEM only)
 # ============================================================
 
-out_dir <- "/Users/janamunoz/Desktop/Literatura tesis/working folder/"
+out_dir <- ""
 
 # Closed-form weighted least squares learner
 wls_learner <- function(X, y, w, gamma, ridge = 1e-6) {
@@ -501,8 +501,6 @@ pct_adv_wins <- mean(x_adv[ok] < x_rand[ok]) * 100
 legend("topleft", bty="n", cex=0.9,
        legend=sprintf("Adversarial wins in %.0f%% of scenarios", pct_adv_wins))
 dev.off()
-
-
 
 
 
