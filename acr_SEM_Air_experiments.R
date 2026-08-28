@@ -258,7 +258,7 @@ for (i in seq_len(nrow(sem_rows))) {
 close(pb)
 
 # ============================================================
-# 2. AIRQUALITY EXPERIMENT — every holdout month, 10 seeds
+# 2. AIRQUALITY EXPERIMENT â every holdout month, 10 seeds
 # ============================================================
 
 cat("\n=== Running airquality experiments ===\n")
@@ -333,7 +333,7 @@ close(pb2)
 # ============================================================
 
 cat("\n\n============================================================\n")
-cat("SEM RESULTS — MEAN SHIFT (averaged over 10 seeds)\n")
+cat("SEM RESULTS â MEAN SHIFT (averaged over 10 seeds)\n")
 cat("============================================================\n")
 d  <- subset(sem_results, shift_type == "mean")
 ag <- aggregate(cbind(ols_mse, acr_adv_mse, cr_rand_mse, oracle_cr_mse,
@@ -343,7 +343,7 @@ ag <- aggregate(cbind(ols_mse, acr_adv_mse, cr_rand_mse, oracle_cr_mse,
 print(round(ag, 3))
 
 cat("\n============================================================\n")
-cat("SEM RESULTS — VARIANCE SHIFT (averaged over 10 seeds)\n")
+cat("SEM RESULTS â VARIANCE SHIFT (averaged over 10 seeds)\n")
 cat("============================================================\n")
 d  <- subset(sem_results, shift_type == "variance")
 ag <- aggregate(cbind(ols_mse, acr_adv_mse, cr_rand_mse, oracle_cr_mse,
@@ -380,7 +380,7 @@ make_ci_band <- function(x_vals, y_vals, y_sd, col, alpha = 0.15) {
           col = adjustcolor(col, alpha.f = alpha), border = NA)
 }
 
-# --- Plot 1: SEM OOD MSE vs alpha — MEAN SHIFT ---
+# --- Plot 1: SEM OOD MSE vs alpha â MEAN SHIFT ---
 pdf(paste0(out_dir,"6-sem_ood_mse_mean.pdf"), width=8, height=5)
 par(mar=c(5,5,3,2))
 d   <- subset(sem_results, shift_type=="mean")
@@ -389,8 +389,8 @@ agsd<- aggregate(cbind(ols_mse,acr_adv_mse,cr_rand_mse,oracle_cr_mse) ~ alpha, d
 
 ylim <- range(ag[,-1]) * c(0.8, 1.2)
 plot(ag$alpha, ag$ols_mse, type="b", pch=16, col=col_ols, lwd=2,
-     ylim=ylim, xlab="Training shift strength (α)",
-     ylab="OOD MSE", main="SEM — Mean Shift: OOD MSE vs Shift Strength")
+     ylim=ylim, xlab="Training shift strength (Î±)",
+     ylab="OOD MSE", main="SEM â Mean Shift: OOD MSE vs Shift Strength")
 make_ci_band(ag$alpha, ag$ols_mse, agsd$ols_mse, col_ols)
 lines(ag$alpha, ag$acr_adv_mse,  type="b", pch=17, col=col_adv,    lwd=2)
 make_ci_band(ag$alpha, ag$acr_adv_mse,  agsd$acr_adv_mse,  col_adv)
@@ -402,7 +402,7 @@ legend("topleft",
        lwd=2, pch=c(16,17,15,18), lty=c(1,1,2,3), bty="n", cex=0.85)
 dev.off()
 
-# --- Plot 2: SEM OOD MSE vs alpha — VARIANCE SHIFT ---
+# --- Plot 2: SEM OOD MSE vs alpha â VARIANCE SHIFT ---
 pdf(paste0(out_dir,"6-sem_ood_mse_variance.pdf"), width=8, height=5)
 par(mar=c(5,5,3,2))
 d   <- subset(sem_results, shift_type=="variance")
@@ -410,8 +410,8 @@ ag  <- aggregate(cbind(ols_mse,acr_adv_mse,cr_rand_mse,oracle_cr_mse) ~ alpha, d
 
 ylim <- range(ag[,-1]) * c(0.8, 1.2)
 plot(ag$alpha, ag$ols_mse, type="b", pch=16, col=col_ols, lwd=2,
-     ylim=ylim, xlab="Training shift strength (α)",
-     ylab="OOD MSE", main="SEM — Variance Shift: OOD MSE vs Shift Strength")
+     ylim=ylim, xlab="Training shift strength (Î±)",
+     ylab="OOD MSE", main="SEM â Variance Shift: OOD MSE vs Shift Strength")
 lines(ag$alpha, ag$acr_adv_mse,  type="b", pch=17, col=col_adv,    lwd=2)
 lines(ag$alpha, ag$cr_rand_mse,  type="b", pch=15, col=col_rand,   lwd=2, lty=2)
 lines(ag$alpha, ag$oracle_cr_mse,type="b", pch=18, col=col_oracle, lwd=2, lty=3)
@@ -431,7 +431,7 @@ ag_m <- aggregate(cbind(acr_adv_auc,cr_rand_auc) ~ alpha, d_m, mean)
 ag_v <- aggregate(acr_adv_auc ~ alpha, d_v, mean)
 
 plot(ag_m$alpha, ag_m$acr_adv_auc, type="b", pch=17, col=col_adv, lwd=2,
-     ylim=c(0.45,1.05), xlab="Training shift strength (α)",
+     ylim=c(0.45,1.05), xlab="Training shift strength (Î±)",
      ylab="Environment discovery AUC",
      main="Adversary: How Well Does It Recover the True Split?")
 lines(ag_v$alpha, ag_v$acr_adv_auc, type="b", pch=17, col=col_adv, lwd=2, lty=2)
@@ -453,9 +453,9 @@ ag <- aggregate(cbind(ols_coef_err,acr_adv_coef_err,cr_rand_coef_err,
 
 ylim <- c(0, max(ag$ols_coef_err)*1.1)
 plot(ag$alpha, ag$ols_coef_err, type="b", pch=16, col=col_ols, lwd=2,
-     ylim=ylim, xlab="Training shift strength (α)",
-     ylab="Normalised coefficient error vs β*",
-     main="Causal Coefficient Recovery — Mean Shift")
+     ylim=ylim, xlab="Training shift strength (Î±)",
+     ylab="Normalised coefficient error vs Î²*",
+     main="Causal Coefficient Recovery â Mean Shift")
 lines(ag$alpha, ag$acr_adv_coef_err,  type="b", pch=17, col=col_adv,    lwd=2)
 lines(ag$alpha, ag$cr_rand_coef_err,  type="b", pch=15, col=col_rand,   lwd=2, lty=2)
 lines(ag$alpha, ag$oracle_coef_err,   type="b", pch=18, col=col_oracle, lwd=2, lty=3)
@@ -496,7 +496,7 @@ plot(x_rand[ok], x_adv[ok], pch=16, col=adjustcolor(col_adv, 0.4),
      xlab="CR (random split) OOD MSE",
      ylab="ACR (adversarial) OOD MSE",
      main="Head-to-Head: Adversarial vs Random Split")
-abline(0, 1, lty=2, col="greya�0", lwd=2)
+abline(0, 1, lty=2, col="greya´0", lwd=2)
 pct_adv_wins <- mean(x_adv[ok] < x_rand[ok]) * 100
 legend("topleft", bty="n", cex=0.9,
        legend=sprintf("Adversarial wins in %.0f%% of scenarios", pct_adv_wins))
