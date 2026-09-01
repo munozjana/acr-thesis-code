@@ -1,10 +1,16 @@
 # ============================================================
 #   Fig 1: All methods in lit review compared
 # ============================================================
+import matplotlib
+matplotlib.rcParams["pdf.use14corefonts"] = True 
+matplotlib.rcParams["font.family"] = "Helvetica"
+matplotlib.rcParams["axes.unicode_minus"] = False
+
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
 
-fig, ax = plt.subplots(figsize=(8, 5.5))
+fig, ax = plt.subplots(figsize=(9.5, 6.5))
 
 # ── Data ──────────────────────────────────────────────────────────────────────
 # (prior_knowledge, guarantee_strength)
@@ -26,26 +32,26 @@ methods = {
 
 # label offsets (dx, dy) to avoid overlap
 offsets = {
-    "EIIL":        ( 0.03, -0.06),
-    "HRM":         ( 0.03,  0.04),
-    "ACR ★":       ( 0.03,  0.03),
-    "DANN":        ( 0.03,  0.03),
-    "IRM":         ( 0.03,  0.03),
-    "REx / Fishr": ( 0.03, -0.06),
-    "GroupDRO":    (-0.03,  0.04),
-    "CR":          (-0.06,  0.04),
-    "Anchor Reg.": ( 0.03,  0.03),
-    "ICP":         ( 0.03,  0.03),
+    "EIIL":        ( 0.035, -0.055),
+    "HRM":         ( 0.035,  0.045),
+    "ACR":         ( 0.045,  0.035),
+    "DANN":        ( 0.035,  0.035),
+    "IRM":         ( 0.035,  0.035),
+    "REx / Fishr": ( 0.035, -0.055),
+    "GroupDRO":    (-0.035,  0.045),
+    "CR":          (-0.065,  0.045),
+    "Anchor Reg.": ( 0.035,  0.035),
+    "ICP":         ( 0.035,  0.035),
 }
 
 for name, (x, y, face, edge) in methods.items():
-    s = 120 if name == "ACR ★" else 80
-    lw = 2.0 if name == "ACR ★" else 1.2
-    ax.scatter(x, y, s=s, color=face, edgecolors=edge, linewidths=lw, zorder=3)
+    is_acr = name == "ACR"
+    if is_acr:                    
+        ax.scatter(x, y, s=420, marker="*", color=face, edgecolors=edge, linewidths=1.6, zorder=4)
+    else:
+        ax.scatter(x, y, s=95, color=face, edgecolors=edge, linewidths=1.2, zorder=3)
     dx, dy = offsets[name]
-    weight = "bold" if name == "ACR ★" else "normal"
-    ax.text(x + dx, y + dy, name, fontsize=9, color=edge,
-            fontweight=weight, va="center")
+    ax.text(x + dx, y + dy, name, fontsize=10, color=edge, fontweight="bold" if is_acr else "normal", va="center", zorder=5)
 
 
 # ── Axes ─────────────────────────────────────────────────────────────────────
@@ -54,13 +60,17 @@ ax.set_ylim(-0.15, 1.12)
 
 ax.set_xticks([0, 0.25, 0.50, 0.75, 1.0])
 ax.set_xticklabels(["None", "Source /\ntarget", "Anchor\nvariables",
-                    "Env labels", "Labels +\nanchors"], fontsize=8.5)
+                    "Env labels", "Labels +\nanchors"], fontsize=9.5)
 ax.set_yticks([0, 0.25, 0.50, 0.75, 1.0])
 ax.set_yticklabels(["None", "Heuristic", "DRO bound",
-                    "Coverage", "Exact"], fontsize=8.5)
+                    "Coverage", "Exact"], fontsize=9.5)
+ax.text(0.455, -0.20, "Prior knowledge required", transform=ax.transAxes, ha="right", va="center", fontsize=12)
+ax.annotate("", xy=(0.575, -0.20), xytext=(0.475, -0.20), xycoords="axes fraction", 
+            textcoords="axes fraction", arrowprops=arrow, annotation_clip=False)
 
-ax.set_xlabel("Prior knowledge required →", fontsize=10, labelpad=8)
-ax.set_ylabel("Theoretical guarantee →", fontsize=10, labelpad=8)
+ax.text(-0.155, 0.40, "Theoretical guarantee", transform=ax.transAxes, ha="center", va="center", rotation=90, fontsize=12)
+ax.annotate("", xy=(-0.155, 0.80), xytext=(-0.155, 0.68), xycoords="axes fraction", 
+            textcoords="axes fraction", arrowprops=arrow, annotation_clip=False)
 
 ax.grid(True, color="#e8e4dc", linewidth=0.7, zorder=0)
 ax.set_axisbelow(True)
@@ -72,11 +82,10 @@ legend_items = [
     mpatches.Patch(facecolor="#bb99dd", edgecolor="#5b4a8a", label="Statistics"),
     mpatches.Patch(facecolor="#ffbb55", edgecolor="#a05000", label="ML"),
     mpatches.Patch(facecolor="#ff7744", edgecolor="#c04020", label="Env discovery"),
-    mpatches.Patch(facecolor="#66bb66", edgecolor="#2a7a40", label="ACR"),
+    Line2D([], [], marker="*", markersize=13, linestyle="none", markerfacecolor="#66bb66", markeredgecolor="#2a7a40", label="ACR (this thesis)"),
 ]
-ax.legend(handles=legend_items, loc="lower right", fontsize=8.5,
-          framealpha=0.9, edgecolor="#cccccc")
+ax.legend(handles=legend_items, loc="lower right", fontsize=9.5, framealpha=0.9, edgecolor="#cccccc")
 
 plt.tight_layout()
-plt.savefig("fig_position_map.pdf", dpi=200, bbox_inches="tight")
+plt.savefig("fig_position_map.pdf", bbox_inches="tight")
 plt.show()
