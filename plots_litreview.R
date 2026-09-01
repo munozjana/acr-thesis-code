@@ -89,7 +89,7 @@ vars <- c("X1", "X2", "X3", "X4")
 subsets <- unlist(lapply(0:4, function(k) combn(vars, k, simplify = FALSE)),
                   recursive = FALSE)
 sub_lab <- sapply(subsets, function(S)
-  if (length(S) == 0) "\u2205" else paste(sub("X", "", S), collapse = ""))
+  if (length(S) == 0) "{ }" else paste(sub("X", "", S), collapse = ""))
 
 run_icp <- function(shift_on, alpha = 2, n = 2000, seed = 11) {
   d1 <- gen_small(n, shift_on, 0,     seed)
@@ -116,21 +116,36 @@ figE <- function() {
     pv  <- if (panel == 1) p_anc else p_chld
     acc <- pv > 0.05
     ttl <- if (panel == 1)
-      "(a) Environments intervene on the parents' equations  \u2192  S* = {X2, X3}"
+      "(a) Intervention on the parents: ICP returns {X2, X3}"
     else
-      "(b) Environments shift only the child X4  \u2192  S* = \u2205 (uninformative)"
+      "(b) Shift on the child X4 only: ICP returns the empty set"
     cols <- ifelse(acc, "#2E8B57", "grey75")
     bp <- barplot(pmax(pv, 1e-4), log = "y", col = cols, border = NA,
-                  names.arg = sub_lab, las = 2, cex.names = 0.72,
-                  ylab = "invariance p-value", main = ttl, cex.main = 0.95,
+                  names.arg = NA, axes = FALSE,
+                  ylab = "", main = ttl, cex.main = 1.0,
                   ylim = c(2e-5, 1.5))
+
+    axis(2, at = 10^(0:-4), labels = c("1e+00", "1e-01", "1e-02", "1e-03", "1e-04"),
+         las = 1, cex.axis = 0.8)
+    mtext("invariance p-value", side = 2, line = 4.0, cex = 0.9)
+
+    axis(1, at = bp, labels = sub_lab, las = 1, cex.axis = 0.72,
+         tick = FALSE, line = -0.6)
+    mtext("candidate subset of {X1, X2, X3, X4}", side = 1, line = 1.9, cex = 0.8)
+
     abline(h = 0.05, lty = 2, col = "grey40")
-    text(max(bp), 0.10, expression(alpha == 0.05), cex = 0.75, adj = 1)
-    legend("topleft", c("accepted (p > 0.05)", "rejected (p-value floored at 1e-4)"),
-           fill = c("#2E8B57", "grey75"), bty = "n", cex = 0.72, border = NA)
+    mtext(expression(alpha ~ "=" ~ 0.05), side = 4, at = 0.05, las = 1,
+          line = 0.4, cex = 0.78, col = "grey30")
+    box(col = "grey60")
   }
+  par(fig = c(0, 1, 0, 1), oma = c(0, 0, 0, 0), mar = c(0, 0, 0, 0), new = TRUE)
+  plot(0, 0, type = "n", axes = FALSE, xlab = "", ylab = "")
+  legend("bottom", horiz = TRUE, inset = c(0, 0.012),
+         legend = c("accepted (p > 0.05)", "rejected (p-value floored at 1e-4)"),
+         fill = c("#2E8B57", "grey75"), border = NA, bty = "n", cex = 0.82,
+         xpd = NA)
 }
-pdf("fig_13_icp.pdf", width = 9.5, height = 6); figE(); dev.off()
+pdf("fig_13_icp.pdf", width = 9.5, height = 6.6); figE(); dev.off()
 
 ## ── FIG 3 causal regularization lambda path ───────────────────────────────
 # Fixed-environment CR, WRD solve WITHOUT clipping, allowing negative weights.
