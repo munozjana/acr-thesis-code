@@ -4,6 +4,7 @@
 #   Fig 3: Pareto frontier (accuracy vs stability)
 #   Fig 4: sem grid heatmap plot
 #   Fig 5: OOD test MSE vs test shift strength for 2nd sem implementation
+#   Fig 6: unified datsets 
 # ============================================================
 
 library(ggplot2)
@@ -466,3 +467,119 @@ p <- ggplot(summ, aes(alpha_test, m, colour = method, fill = method)) +
 ggsave(paste0(out_dir, "9-fig_mse_vs_alphatest.pdf"), p, width = 8, height = 9)
 write.csv(curves, paste0(out_dir, "9-mse_vs_alphatest.csv"), row.names = FALSE)
 print(cover)
+
+# ============================================================
+# FIGURE 6: UNIFIED DATASETS PLOT
+# ============================================================
+
+load(paste0(out_dir, "6-systematic_results.RData"))
+cm <- read.csv(paste0(base_dir, "cmnist_results.csv"))
+g  <- sort(unique(cm$gap))
+mm  <- function(v) sapply(g, function(x) mean(cm[[v]][abs(cm$gap - x) < 1e-9]))
+sdv <- function(v) sapply(g, function(x) sd(cm[[v]][abs(cm$gap - x) < 1e-9]))
+
+cm_acr <- 100 * (mm("erm_mse") - mm("acr_mse"))    / mm("erm_mse")
+cm_crr <- 100 * (mm("erm_mse") - mm("crrand_mse")) / mm("erm_mse")
+cm$acr_p <- 100 * (cm$erm_mse - cm$acr_mse)    / cm$erm_mse
+cm$crr_p <- 100 * (cm$erm_mse - cm$crrand_mse) / cm$erm_mse
+cm_acr_sd <- sapply(g, function(x) sd(cm$acr_p[abs(cm$gap - x) < 1e-9]))
+cm_crr_sd <- sapply(g, function(x) sd(cm$crr_p[abs(cm$gap - x) < 1e-9]))
+
+# 1st dataset: ny airquality
+aq_ok <- aq_results[!is.na(aq_results$ols_mse), ]
+aq_ok$adv_p  <- 100 * (aq_ok$ols_mse - aq_ok$acr_adv_mse) / aq_ok$ols_mse
+aq_ok$rand_p <- 100 * (aq_ok$ols_mse - aq_ok$cr_rand_mse) / aq_ok$ols_mse
+aq_m  <- aggregate(cbind(ols_mse, acr_adv_mse, cr_rand_mse) ~ holdout_month,
+                   aq_ok, mean)
+aq_acr <- 100 * (aq_m$ols_mse - aq_m$acr_adv_mse) / aq_m$ols_mse
+aq_crr <- 100 * (aq_m$ols_mse - aq_m$cr_rand_mse) / aq_m$ols_mse
+aq_acr_sd <- aggregate(adv_p  ~ holdout_month, aq_ok, sd)$adv_p
+aq_crr_sd <- aggregate(rand_p ~ holdout_month, aq_ok, sd)$rand_p
+
+# rest of datasets
+rs <- real_seed_results
+rs_order <- c("CO2", "ChickWeight", "Boston")
+rs$dataset <- factor(rs$dataset, levels = rs_order)
+rs_m <- aggregate(cbind(ols_mse, acr_adv_mse, cr_rand_mse) ~ dataset, rs, mean)
+rs_m <- rs_m[match(rs_order, as.character(rs_m$dataset)), ]
+rl_acr <- 100 * (rs_m$ols_mse - rs_m$acr_adv_mse) / rs_m$ols_mse
+rl_crr <- 100 * (rs_m$ols_mse - rs_m$cr_rand_mse) / rs_m$ols_mse
+sd_by <- function(col) {
+  a <- aggregate(as.formula(paste(col, "~ dataset")), rs, sd)
+  a[match(rs_order, as.character(a$dataset)), 2]
+}
+rl_acr_sd <- sd_by("adv_vs_ols")   # sd is unaffected by the sign flip
+rl_crr_sd <- sd_by("rand_vs_ols")
+
+
+lab <- c(sprintf("MNIST\n%.2f/%.2f", 0.85 + g / 2, 0.85 - g / 2),
+         "AQ\nMay", "AQ\nJun", "AQ\nJul", "AQ\nAug", "AQ\nSep", 
+         "CO2\nMississippi", "ChickWt\nDiet 4", "Boston\nHigh crime")
+acr    <- c(cm_acr,    aq_acr,    rl_acr)
+crr    <- c(cm_crr,    aq_crr,    rl_crr)
+acr_sd <- c(cm_acr_sd, aq_acr_sd, rl_acr_sd)
+crr_sd <- c(cm_crr_sd, aq_crr_sd, rl_crr_sd)
+ncm <- length(g); n <- length(lab)
+stopifnot(length(acr) == n, length(crr) == n)
+
+err_scale <- 1      
+grp   <- c(rep(1, ncm), rep(2, 5), 3, 4, 5)
+gname <- c("Colored MNIST", "NY Airquality", "CO2", "ChickWt", "Boston")
+gcol  <- c("#2980B9", "#E67E22", "#1ABC9C", "#9B59B6", "#E74C3C")
+col_acr <- C_ACR; col_crr <- C_RAND
+ 
+pdf(paste0(out_dir, "7-fig_unified_comparison.pdf"), width = 13.2, height = 6.3)
+par(mar = c(5.2, 5.0, 3.4, 1.2), family = "sans")
+ 
+x <- seq_len(n); off <- 0.17; hw <- 0.15
+rng  <- range(c(acr - acr_sd, acr + acr_sd, crr - crr_sd, crr + crr_sd, 0),
+              na.rm = TRUE)
+pad  <- 0.12 * diff(rng)
+ylim <- c(rng[1] - pad, rng[2] + 2.5 * pad)   # headroom for the group labels
+ticks <- pretty(rng, n = 7)
+ 
+plot(NA, xlim = c(0.4, n + 0.6), ylim = ylim, xaxs = "i",
+     xaxt = "n", yaxt = "n", xlab = "", ylab = "")
+ 
+bs <- tapply(x, grp, min); be <- tapply(x, grp, max)
+for (i in seq_along(bs))
+  rect(bs[i] - 0.5, ylim[1], be[i] + 0.5, ylim[2],
+       col = adjustcolor(gcol[i], alpha.f = 0.051), border = NA)
+for (i in seq_along(bs)[-1])
+  abline(v = bs[i] - 0.5, col = "grey65", lty = 2)
+abline(h = 0, col = "grey45", lwd = 1)
+ 
+axis(2, at = ticks, las = 1, cex.axis = 0.95)
+mtext("% improvement over baseline  (OLS / ERM)", side = 2, line = 3.1, cex = 1.0)
+ 
+rect(x - off - hw, 0, x - off + hw, crr, col = col_crr, border = NA)
+rect(x + off - hw, 0, x + off + hw, acr, col = col_acr, border = NA)
+ 
+## variation whiskers
+e <- crr_sd * err_scale; ok <- !is.na(e)
+segments(x[ok] - off, crr[ok] - e[ok], x[ok] - off, crr[ok] + e[ok],
+         col = "black", lwd = 0.9)
+e <- acr_sd * err_scale; ok <- !is.na(e)
+segments(x[ok] + off, acr[ok] - e[ok], x[ok] + off, acr[ok] + e[ok],
+         col = "black", lwd = 0.9)
+ 
+axis(1, at = x, labels = FALSE, tick = FALSE)
+mtext(lab, side = 1, at = x, line = 1.5, cex = 0.72)
+text((bs + be) / 2, ylim[2] - 0.6 * pad, gname, col = gcol, font = 2, cex = 0.82)
+ 
+legend("topleft", c("ACR-Adv", "CR-Random"), fill = c(col_acr, col_crr),
+       border = NA, bty = "n", cex = 0.92, inset = c(0.005, 0.005))
+mtext("Positive = better than OLS/ERM baseline   |   Negative = worse",
+      side = 1, line = 3.7, cex = 0.8, font = 3, col = "grey40")
+title("ACR vs Baseline on a Unified Scale Across Datasets and Benchmarks",
+      cex.main = 1.25, font.main = 2)
+box()
+dev.off()
+ 
+unified_tbl <- data.frame(panel = lab, acr_pct = round(acr, 2),
+                          acr_sd = round(acr_sd, 2),
+                          crrand_pct = round(crr, 2),
+                          crrand_sd = round(crr_sd, 2))
+print(unified_tbl, row.names = FALSE)
+write.csv(unified_tbl, paste0(out_dir, "7-unified_comparison.csv"),
+          row.names = FALSE)
