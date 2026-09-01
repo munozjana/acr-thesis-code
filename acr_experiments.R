@@ -5,6 +5,8 @@
 #   - Airquality (every holdout month)
 #   - Multiple seeds, multiple shift strengths
 #
+# Real data: ChickWeight, Boston housing, CO2 uptake, Colored MNIST
+#
 # Methods compared:
 #   OLS         : pooled least squares (gamma = 0)
 #   ACR-Adv     : adversarial soft-weight split (our method)
@@ -74,7 +76,15 @@ cv_gamma <- function(X, y, gamma_grid, K = 5, method = "adv", w_oracle = NULL,
                      seed = 1, iterations = 30) {
   set.seed(seed)
   n     <- nrow(X)
-  folds <- sample(rep(seq_len(K), length.out = n))
+  if (is.null(groups)) {
+    folds <- sample(rep(seq_len(K), length.out = n))
+  } else {
+    # grouped CV: all rows of a group land in the same fold (repeated measures)
+    g      <- as.character(groups)
+    ug     <- unique(g)
+    gfold  <- sample(rep(seq_len(K), length.out = length(ug)))
+    folds  <- gfold[match(g, ug)]
+  }
   scores <- sapply(gamma_grid, function(g) {
     fold_mse <- sapply(seq_len(K), function(k) {
       tr <- folds != k;  va <- folds == k
@@ -258,7 +268,7 @@ for (i in seq_len(nrow(sem_rows))) {
 close(pb)
 
 # ============================================================
-# 2. AIRQUALITY EXPERIMENT â every holdout month, 10 seeds
+# 2. AIRQUALITY EXPERIMENT every holdout month, 10 seeds
 # ============================================================
 
 cat("\n=== Running airquality experiments ===\n")
@@ -329,11 +339,184 @@ for (i in seq_len(nrow(aq_results))) {
 close(pb2)
 
 # ============================================================
-# 3. SUMMARY TABLES
+# 3. REST OF DATASETS 
+#       ChickWeight  split: diets 1-3 (train) vs diet 4 (test)
+#       Boston       split: crim < 1 (train) vs crim >= 1 (test)
+#       CO2          split: Quebec (train) vs Mississippi (test)
+# ============================================================
+
+run_real_dataset <- function(Xtr, ytr, Xte, yte, env_tr, gamma_grid, seeds,
+                             tag, groups = NULL) {
+  cat("  ", tag, " (n_train = ", nrow(Xtr), ", n_test = ", nrow(Xte), ")\n", sep = "")
+  ols_beta <- as.vector(coef(lm(ytr ~ Xtr - 1))) 
+  per_seed <- lapply(seeds, function(sid) {
+    set.seed(sid * 100)
+    w_rand <- as.numeric(sample(c(0, 1), nrow(Xtr), replace = TRUE))
+    g_adv  <- cv_gamma(Xtr, ytr, gamma_grid, method = "adv",
+                       seed = sid, groups = groups)
+    g_rand <- cv_gamma(Xtr, ytr, gamma_grid, method = "rand",
+                       seed = sid, groups = groups)
+    fit_adv   <- fit_acr_adv(Xtr, ytr, g_adv)
+    beta_rand <- fit_cr_fixed(Xtr, ytr, g_rand, w_rand)
+    mse <- function(b) mean((yte - Xte %*% b)^2)
+    data.frame(seed        = sid,
+               ols_mse     = mse(ols_beta),
+               acr_adv_mse = mse(fit_adv$beta),
+               cr_rand_mse = mse(beta_rand),
+               acr_adv_auc = compute_auc(fit_adv$w, env_tr),
+               cr_rand_auc = compute_auc(w_rand,    env_tr),
+               acr_adv_gamma = g_adv,
+               cr_rand_gamma = g_rand)
+  })
+  per_seed <- do.call(rbind, per_seed)
+  per_seed$dataset <- tag
+  per_seed$adv_vs_ols  <- (per_seed$acr_adv_mse - per_seed$ols_mse) / per_seed$ols_mse * 100
+  per_seed$rand_vs_ols <- (per_seed$cr_rand_mse - per_seed$ols_mse) / per_seed$ols_mse * 100
+  summ <- data.frame(
+    dataset       = tag,
+    n_train       = nrow(Xtr),
+    n_test        = nrow(Xte),
+    ols_mse       = mean(per_seed$ols_mse),
+    acr_adv_mse   = mean(per_seed$acr_adv_mse),
+    cr_rand_mse   = mean(per_seed$cr_rand_mse),
+    acr_adv_auc   = mean(per_seed$acr_adv_auc),
+    cr_rand_auc   = mean(per_seed$cr_rand_auc),
+    auc_null      = auc_null_mean(sum(env_tr == 2), sum(env_tr == 1)),
+    acr_adv_gamma = mean(per_seed$acr_adv_gamma),
+    cr_rand_gamma = mean(per_seed$cr_rand_gamma),
+    stringsAsFactors = FALSE)
+  attr(summ, "per_seed") <- per_seed
+  summ
+}
+ 
+# --- ChickWeight ---
+data(ChickWeight)
+cw     <- as.data.frame(ChickWeight)
+cw_tr  <- cw[cw$Diet %in% c(1, 2, 3), ]
+cw_te  <- cw[cw$Diet == 4, ]
+mu_cw  <- mean(cw_tr$Time);  sd_cw <- sd(cw_tr$Time)
+Xtr_cw <- add_int(scale(matrix(cw_tr$Time, ncol = 1), mu_cw, sd_cw))
+Xte_cw <- add_int(scale(matrix(cw_te$Time, ncol = 1), mu_cw, sd_cw))
+env_cw <- ifelse(cw_tr$Diet == 3, 2L, 1L)
+ 
+cw_res <- run_real_dataset(Xtr_cw, cw_tr$weight, Xte_cw, cw_te$weight,
+                           env_cw, gamma_grid, seeds, "ChickWeight",
+                           groups = cw_tr$Chick)
+ 
+# --- Boston housing ---
+library(MASS)
+bos      <- Boston
+bos_tr   <- bos[bos$crim <  1, ]
+bos_te   <- bos[bos$crim >= 1, ]
+pred_bos <- setdiff(names(bos), c("medv", "crim"))
+mu_bos   <- colMeans(as.matrix(bos_tr[, pred_bos]))
+sd_bos   <- apply(as.matrix(bos_tr[, pred_bos]), 2, sd)
+Xtr_bos  <- add_int(scale(as.matrix(bos_tr[, pred_bos]), mu_bos, sd_bos))
+Xte_bos  <- add_int(scale(as.matrix(bos_te[, pred_bos]), mu_bos, sd_bos))
+env_bos  <- ifelse(bos_tr$crim > median(bos_tr$crim), 2L, 1L)
+ 
+bos_res <- run_real_dataset(Xtr_bos, bos_tr$medv, Xte_bos, bos_te$medv,
+                            env_bos, gamma_grid, seeds, "Boston")
+ 
+# --- CO2 uptake ---
+data(CO2)
+co2df    <- as.data.frame(CO2)
+co2_tr   <- co2df[co2df$Type == "Quebec", ]
+co2_te   <- co2df[co2df$Type == "Mississippi", ]
+mu_co2   <- mean(co2_tr$conc);  sd_co2 <- sd(co2_tr$conc)
+Xtr_co2  <- add_int(scale(matrix(co2_tr$conc, ncol = 1), mu_co2, sd_co2))
+Xte_co2  <- add_int(scale(matrix(co2_te$conc, ncol = 1), mu_co2, sd_co2))
+env_co2  <- ifelse(co2_tr$Treatment == "chilled", 2L, 1L)
+ 
+co2_res <- run_real_dataset(Xtr_co2, co2_tr$uptake, Xte_co2, co2_te$uptake,
+                            env_co2, gamma_grid, seeds, "CO2",
+                            groups = co2_tr$Plant)
+ 
+# keep the per-seed rows: the unified figure needs their spread
+real_seed_results <- do.call(rbind, lapply(list(cw_res, bos_res, co2_res),
+                                           function(d) attr(d, "per_seed")))
+real_results <- rbind(cw_res, bos_res, co2_res)
+real_results$adv_vs_ols  <- round((real_results$acr_adv_mse - real_results$ols_mse) /
+                                    real_results$ols_mse * 100, 1)
+real_results$rand_vs_ols <- round((real_results$cr_rand_mse - real_results$ols_mse) /
+                                    real_results$ols_mse * 100, 1)
+# --- CMNIST ---
+gaps      <- c(0, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30)
+seeds     <- 1:5
+n_per_env <- 2000
+n_test    <- 2000
+
+rd <- function(tag, k) as.matrix(read.csv(sprintf("cm_data/%s_%s.csv", tag, k), header = FALSE))
+
+outfile <- "cmnist_results.csv"
+out <- if (file.exists(outfile)) read.csv(outfile) else NULL
+
+for (gp in gaps) for (sd_i in seeds) {
+  if (!is.null(out) && any(abs(out$gap - gp) < 1e-9 & out$seed == sd_i)) next
+  tag <- sprintf("g%03d_s%d", round(gp * 100), sd_i)
+  system(sprintf("python3 make_cmnist.py %f %d %d %d %s > /dev/null",
+                 gp, sd_i, n_per_env, n_test, tag))
+
+  Xtr <- cbind(1, rd(tag, "Xtr")); ytr <- as.vector(rd(tag, "ytr"))
+  Xte <- cbind(1, rd(tag, "Xte")); yte <- as.vector(rd(tag, "yte"))
+  Gtr <- cbind(1, rd(tag, "Gtr")); Gte <- cbind(1, rd(tag, "Gte"))
+  env <- as.vector(rd(tag, "env"))
+
+  t0  <- Sys.time()
+  fit <- fit_acr_two_phase(Xtr, ytr, seed = sd_i)
+
+  b_erm  <- ridge_ols(Xtr, ytr)
+  w_orac <- as.numeric(env == 1)
+  b_orcr <- acr_learner(Xtr, ytr, w_orac, fit$gamma)
+
+  set.seed(1000 + sd_i)                                   # random balanced split
+  w_rand <- ifelse(sample(rep(c(0, 1), length.out = nrow(Xtr))) == 1,
+                   1 - HP$eps, HP$eps)
+  b_crrd <- acr_learner(Xtr, ytr, w_rand, fit$gamma)
+
+  b_gray <- ridge_ols(Gtr, ytr)                           # colour-free oracle
+
+  mse <- function(X, b) mean((yte - X %*% b)^2)
+  acc <- function(X, b) mean((as.vector(X %*% b) > 0.5) == (yte > 0.5))
+
+  row <- data.frame(
+    gap = gp, seed = sd_i, corr1 = 0.85 + gp / 2, corr2 = 0.85 - gp / 2,
+    erm_mse    = mse(Xte, b_erm),  erm_acc    = acc(Xte, b_erm),
+    acr_mse    = mse(Xte, fit$beta), acr_acc  = acc(Xte, fit$beta),
+    crrand_mse = mse(Xte, b_crrd), crrand_acc = acc(Xte, b_crrd),
+    oracr_mse  = mse(Xte, b_orcr), oracr_acc  = acc(Xte, b_orcr),
+    gray_mse   = mse(Gte, b_gray), gray_acc   = acc(Gte, b_gray),
+    adv_auc    = compute_auc(fit$w, env),
+    auc_null   = auc_null_mean(n_per_env, n_per_env),
+    gamma      = fit$gamma, gamma_max = fit$gamma_max,
+    secs       = as.numeric(Sys.time() - t0, units = "secs"))
+
+  out <- rbind(out, row)
+  write.csv(out, outfile, row.names = FALSE)
+  unlink(list.files("cm_data", pattern = paste0("^", tag, "_"), full.names = TRUE))
+  cat(sprintf("gap %.2f seed %d | ERM %.4f  ACR %.4f  OrCR %.4f  gray %.4f | AUC %.3f  G* %.2f | %.0fs\n",
+              gp, sd_i, row$erm_mse, row$acr_mse, row$oracr_mse, row$gray_mse,
+              row$adv_auc, row$gamma, row$secs))
+  flush.console()
+}
+
+cat("\n== aggregated over seeds ==\n")
+agg <- aggregate(cbind(erm_mse, acr_mse, crrand_mse, oracr_mse, gray_mse,
+                       erm_acc, acr_acc, oracr_acc, gray_acc,
+                       adv_auc, gamma) ~ gap, data = out, FUN = mean)
+agg$acr_vs_erm_pct <- 100 * (agg$erm_mse - agg$acr_mse) / agg$erm_mse
+agg$crrand_vs_erm_pct <- 100 * (agg$erm_mse -
+                                aggregate(crrand_mse ~ gap, out, mean)$crrand_mse) / agg$erm_mse
+print(round(agg, 4), row.names = FALSE)
+write.csv(agg, "cmnist_aggregated.csv", row.names = FALSE)
+
+                                           
+# ============================================================
+# 4. SUMMARY TABLES
 # ============================================================
 
 cat("\n\n============================================================\n")
-cat("SEM RESULTS â MEAN SHIFT (averaged over 10 seeds)\n")
+cat("SEM RESULTS: MEAN SHIFT (averaged over 10 seeds)\n")
 cat("============================================================\n")
 d  <- subset(sem_results, shift_type == "mean")
 ag <- aggregate(cbind(ols_mse, acr_adv_mse, cr_rand_mse, oracle_cr_mse,
@@ -343,7 +526,7 @@ ag <- aggregate(cbind(ols_mse, acr_adv_mse, cr_rand_mse, oracle_cr_mse,
 print(round(ag, 3))
 
 cat("\n============================================================\n")
-cat("SEM RESULTS â VARIANCE SHIFT (averaged over 10 seeds)\n")
+cat("SEM RESULTS: VARIANCE SHIFT (averaged over 10 seeds)\n")
 cat("============================================================\n")
 d  <- subset(sem_results, shift_type == "variance")
 ag <- aggregate(cbind(ols_mse, acr_adv_mse, cr_rand_mse, oracle_cr_mse,
@@ -366,7 +549,7 @@ out_tbl[num_cols] <- round(out_tbl[num_cols], 3)
 print(out_tbl)
 
 # ============================================================
-# 4. PLOTS
+# 5. PLOTS
 # ============================================================
 
 col_ols    <- "#2980B9"
@@ -380,7 +563,7 @@ make_ci_band <- function(x_vals, y_vals, y_sd, col, alpha = 0.15) {
           col = adjustcolor(col, alpha.f = alpha), border = NA)
 }
 
-# --- Plot 1: SEM OOD MSE vs alpha â MEAN SHIFT ---
+# --- Plot 1: SEM OOD MSE vs alpha w/MEAN SHIFT ---
 pdf(paste0(out_dir,"6-sem_ood_mse_mean.pdf"), width=8, height=5)
 par(mar=c(5,5,3,2))
 d   <- subset(sem_results, shift_type=="mean")
@@ -389,8 +572,8 @@ agsd<- aggregate(cbind(ols_mse,acr_adv_mse,cr_rand_mse,oracle_cr_mse) ~ alpha, d
 
 ylim <- range(ag[,-1]) * c(0.8, 1.2)
 plot(ag$alpha, ag$ols_mse, type="b", pch=16, col=col_ols, lwd=2,
-     ylim=ylim, xlab="Training shift strength (Î±)",
-     ylab="OOD MSE", main="SEM â Mean Shift: OOD MSE vs Shift Strength")
+     ylim=ylim, xlab="Training shift strength (alpha)",
+     ylab="OOD MSE", main="SEM w/Mean Shift: OOD MSE vs Shift Strength")
 make_ci_band(ag$alpha, ag$ols_mse, agsd$ols_mse, col_ols)
 lines(ag$alpha, ag$acr_adv_mse,  type="b", pch=17, col=col_adv,    lwd=2)
 make_ci_band(ag$alpha, ag$acr_adv_mse,  agsd$acr_adv_mse,  col_adv)
@@ -402,7 +585,7 @@ legend("topleft",
        lwd=2, pch=c(16,17,15,18), lty=c(1,1,2,3), bty="n", cex=0.85)
 dev.off()
 
-# --- Plot 2: SEM OOD MSE vs alpha â VARIANCE SHIFT ---
+# --- Plot 2: SEM OOD MSE vs alpha w/VARIANCE SHIFT ---
 pdf(paste0(out_dir,"6-sem_ood_mse_variance.pdf"), width=8, height=5)
 par(mar=c(5,5,3,2))
 d   <- subset(sem_results, shift_type=="variance")
@@ -410,7 +593,7 @@ ag  <- aggregate(cbind(ols_mse,acr_adv_mse,cr_rand_mse,oracle_cr_mse) ~ alpha, d
 
 ylim <- range(ag[,-1]) * c(0.8, 1.2)
 plot(ag$alpha, ag$ols_mse, type="b", pch=16, col=col_ols, lwd=2,
-     ylim=ylim, xlab="Training shift strength (Î±)",
+     ylim=ylim, xlab="Training shift strength (alpha)",
      ylab="OOD MSE", main="SEM â Variance Shift: OOD MSE vs Shift Strength")
 lines(ag$alpha, ag$acr_adv_mse,  type="b", pch=17, col=col_adv,    lwd=2)
 lines(ag$alpha, ag$cr_rand_mse,  type="b", pch=15, col=col_rand,   lwd=2, lty=2)
@@ -431,7 +614,7 @@ ag_m <- aggregate(cbind(acr_adv_auc,cr_rand_auc) ~ alpha, d_m, mean)
 ag_v <- aggregate(acr_adv_auc ~ alpha, d_v, mean)
 
 plot(ag_m$alpha, ag_m$acr_adv_auc, type="b", pch=17, col=col_adv, lwd=2,
-     ylim=c(0.45,1.05), xlab="Training shift strength (Î±)",
+     ylim=c(0.45,1.05), xlab="Training shift strength (alpha)",
      ylab="Environment discovery AUC",
      main="Adversary: How Well Does It Recover the True Split?")
 lines(ag_v$alpha, ag_v$acr_adv_auc, type="b", pch=17, col=col_adv, lwd=2, lty=2)
@@ -453,9 +636,9 @@ ag <- aggregate(cbind(ols_coef_err,acr_adv_coef_err,cr_rand_coef_err,
 
 ylim <- c(0, max(ag$ols_coef_err)*1.1)
 plot(ag$alpha, ag$ols_coef_err, type="b", pch=16, col=col_ols, lwd=2,
-     ylim=ylim, xlab="Training shift strength (Î±)",
-     ylab="Normalised coefficient error vs Î²*",
-     main="Causal Coefficient Recovery â Mean Shift")
+     ylim=ylim, xlab="Training shift strength (alpha)",
+     ylab="Normalised coefficient error vs beta*",
+     main="Causal Coefficient Recovery w/Mean Shift")
 lines(ag$alpha, ag$acr_adv_coef_err,  type="b", pch=17, col=col_adv,    lwd=2)
 lines(ag$alpha, ag$cr_rand_coef_err,  type="b", pch=15, col=col_rand,   lwd=2, lty=2)
 lines(ag$alpha, ag$oracle_coef_err,   type="b", pch=18, col=col_oracle, lwd=2, lty=3)
@@ -496,14 +679,11 @@ plot(x_rand[ok], x_adv[ok], pch=16, col=adjustcolor(col_adv, 0.4),
      xlab="CR (random split) OOD MSE",
      ylab="ACR (adversarial) OOD MSE",
      main="Head-to-Head: Adversarial vs Random Split")
-abline(0, 1, lty=2, col="greya´0", lwd=2)
+abline(0, 1, lty=2, col="grey40", lwd=2)
 pct_adv_wins <- mean(x_adv[ok] < x_rand[ok]) * 100
 legend("topleft", bty="n", cex=0.9,
        legend=sprintf("Adversarial wins in %.0f%% of scenarios", pct_adv_wins))
 dev.off()
-
-
-
 
 save(sem_results, aq_results,
      file=paste0(out_dir,"6-systematic_results.RData"))
